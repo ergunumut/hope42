@@ -795,6 +795,8 @@ input:focus, select:focus, textarea:focus {
     transition: all var(--transition-speed);
     display: flex;
     flex-direction: column;
+    flex-shrink: 0; /* Prevent shrinking when many results are present */
+    height: 130px;  /* Set a stable height for readability */
 }
 
 .scene-card:hover {
