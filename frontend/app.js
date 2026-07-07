@@ -839,9 +839,19 @@ function getThumbnailUrl(feature) {
 }
 
 // Display Scene Details Modal
-window.showSceneMetadata = function(id) {
-    const feature = state.searchResults.features.find(f => f.id === id);
-    if (!feature) return;
+function showSceneMetadata(id) {
+    if (!state.searchResults || !state.searchResults.features) return;
+
+    // Robust search: match either raw id or index-based fallback id
+    const feature = state.searchResults.features.find((f, idx) => {
+        const fId = f.id || `scene-${idx}`;
+        return fId === id;
+    });
+    
+    if (!feature) {
+        console.error("Scene metadata not found for ID:", id);
+        return;
+    }
 
     const properties = feature.properties || {};
     const thumbUrl = getThumbnailUrl(feature);
@@ -881,7 +891,8 @@ window.showSceneMetadata = function(id) {
     `;
 
     metadataModal.style.display = 'flex';
-};
+}
+window.showSceneMetadata = showSceneMetadata;
 
 btnMetadataModalClose.addEventListener('click', () => {
     metadataModal.style.display = 'none';
