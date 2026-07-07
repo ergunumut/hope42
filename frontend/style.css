@@ -544,7 +544,7 @@ input:focus, select:focus, textarea:focus {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 250px;
+    min-height: 0; /* Let it shrink below content height */
     overflow: hidden;
 }
 
@@ -565,7 +565,8 @@ input:focus, select:focus, textarea:focus {
 
 .settings-card#searchParamsCard[open] #collectionsList {
     flex: 1;
-    max-height: none;
+    max-height: calc(100vh - 460px); /* Fallback to guarantee scrollability on all screens */
+    min-height: 180px;
     overflow-y: auto;
 }
 
