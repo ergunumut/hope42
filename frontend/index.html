@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COSMOS | UP42 Catalog Matcher</title>
+    
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Leaflet Draw CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+
+    <!-- Custom Styling -->
+    <link rel="stylesheet" href="/frontend/style.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-logo">
+                <i class="fa-solid fa-star neon-purple"></i>
+                <h1>HOPE42 <span class="divider">|</span> <span class="subtitle">UP42 CATALOG MATCHER</span></h1>
+            </div>
+            <div class="auth-status" id="authStatusBadge">
+                <span class="status-dot offline"></span>
+                <span class="status-text">Disconnected</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Sidebar Panel: Left (Control Center) -->
+            <aside class="sidebar control-panel">
+                
+                <!-- Section 1: Authentication -->
+                <details open class="settings-card" id="authDetailsCard">
+                    <summary><i class="fa-solid fa-key icon-glow"></i> UP42 API Authentication <span id="authCheckmark" style="color: var(--color-emerald); margin-left: 8px; display: none;"><i class="fa-solid fa-circle-check"></i></span></summary>
+                    <div class="details-content">
+                        <!-- Form state (shown when offline) -->
+                        <form id="authForm" class="input-group-stack">
+                            <div class="form-group">
+                                <label for="authEmail">Email Address</label>
+                                <input type="email" id="authEmail" placeholder="your-email@example.com" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="authPassword">Password</label>
+                                <input type="password" id="authPassword" placeholder="••••••••••••" required>
+                            </div>
+                            <button type="submit" id="btnConnect" class="btn btn-primary btn-block">
+                                <i class="fa-solid fa-plug"></i> Connect Console
+                            </button>
+                        </form>
+                        
+                        <!-- Success State (shown when connected) -->
+                        <div id="authSuccessContainer" class="auth-success-box" style="display: none;">
+                            <div class="auth-success-header">
+                                <i class="fa-solid fa-circle-check text-emerald"></i>
+                                <span>Connection Successful</span>
+                            </div>
+                            <div class="auth-success-user" id="connectedUserEmail">username@example.com</div>
+                            <button id="btnLogout" class="btn btn-secondary btn-block btn-sm">
+                                <i class="fa-solid fa-right-from-bracket"></i> Logout
+                            </button>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Section 2: Vector Boundaries -->
+                <details open class="settings-card">
+                    <summary><i class="fa-solid fa-draw-polygon icon-glow"></i> Vector Boundaries (AOI)</summary>
+                    <div class="details-content">
+                        <div class="vector-tabs">
+                            <button class="tab-btn active" data-tab="uploadTab">Upload</button>
+                            <button class="tab-btn" data-tab="wktTab">WKT</button>
+                            <button class="tab-btn" data-tab="drawTab">Draw</button>
+                        </div>
+                        
+                        <!-- Upload Tab -->
+                        <div class="tab-pane active" id="uploadTab">
+                            <div class="upload-dropzone" id="dropzone">
+                                <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                                <p>Drag & drop vector file or click to select</p>
+                                <span class="supported-formats">GeoJSON, KML, Zipped Shapefile (.zip), WKT (.wkt, .txt)</span>
+                                <input type="file" id="fileInput" accept=".geojson,.json,.kml,.zip,.wkt,.txt" style="display: none;">
+                            </div>
+                        </div>
+
+                        <!-- WKT Tab -->
+                        <div class="tab-pane" id="wktTab">
+                            <div class="form-group">
+                                <label for="wktInput">Paste WKT Geometry</label>
+                                <textarea id="wktInput" placeholder="POLYGON ((lon lat, lon lat, ...))" rows="3"></textarea>
+                            </div>
+                            <button id="btnLoadWkt" class="btn btn-secondary btn-block">
+                                <i class="fa-solid fa-file-import"></i> Load WKT Geometry
+                            </button>
+                        </div>
+
+                        <!-- Draw Tab -->
+                        <div class="tab-pane" id="drawTab">
+                            <p class="help-text">Use the toolbar controls directly on the map to draw boundaries.</p>
+                            <div class="draw-shortcuts">
+                                <button id="btnDrawPolygon" class="btn btn-outline btn-block">
+                                    <i class="fa-solid fa-shapes"></i> Draw Polygon
+                                </button>
+                                <button id="btnDrawBbox" class="btn btn-outline btn-block">
+                                    <i class="fa-solid fa-vector-square"></i> Draw Rectangle
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Active Boundaries List -->
+                        <div class="active-boundaries-list" id="boundariesListContainer">
+                            <h4>Active Boundaries (<span id="boundaryCount">0</span>)</h4>
+                            <div class="boundaries-scroll" id="activeBoundariesList">
+                                <p class="empty-list-text">No boundaries added. Add one above to start searching.</p>
+                            </div>
+                            <button id="btnClearBoundaries" class="btn btn-outline btn-block btn-sm" style="display: none;">
+                                <i class="fa-solid fa-trash-can"></i> Clear All
+                            </button>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Section 3: Search Catalog Filters -->
+                <details open class="settings-card" id="searchParamsCard">
+                    <summary><i class="fa-solid fa-sliders icon-glow"></i> Search Catalog Parameters</summary>
+                    <div class="details-content">
+                        <!-- Date Range -->
+                        <div class="form-row">
+                            <div class="form-group col">
+                                <label for="startDate">Start Date</label>
+                                <input type="date" id="startDate" required>
+                            </div>
+                            <div class="form-group col">
+                                <label for="endDate">End Date</label>
+                                <input type="date" id="endDate" required>
+                            </div>
+                        </div>
+
+                        <!-- Cloud Cover Slider -->
+                        <div class="form-group">
+                            <div class="slider-header">
+                                <label for="cloudCover">Max Cloud Cover</label>
+                                <span class="slider-value" id="cloudCoverVal">20%</span>
+                            </div>
+                            <input type="range" id="cloudCover" min="0" max="100" value="20" class="styled-range">
+                        </div>
+
+                        <!-- Limit -->
+                        <div class="form-group">
+                            <label for="searchLimit">Max Results Limit</label>
+                            <select id="searchLimit">
+                                <option value="50">50 items</option>
+                                <option value="100" selected>100 items</option>
+                                <option value="250">250 items</option>
+                                <option value="500">500 items</option>
+                            </select>
+                        </div>
+
+                        <!-- Satellite Collections -->
+                        <div class="form-group form-group-collections">
+                            <label>Satellite Collections</label>
+                            
+                            <!-- Sub-tabs for Product Types -->
+                            <div class="col-tabs">
+                                <button type="button" class="col-tab-btn active" data-type="OPTICAL">Optical (<span id="countOPTICAL">0</span>)</button>
+                                <button type="button" class="col-tab-btn" data-type="SAR">SAR (<span id="countSAR">0</span>)</button>
+                                <button type="button" class="col-tab-btn" data-type="ELEVATION">Elevation (<span id="countELEVATION">0</span>)</button>
+                            </div>
+                            
+                            <!-- Select/Deselect buttons -->
+                            <div class="col-toggle-bar">
+                                <button type="button" id="btnSelectAllCol" class="btn-toggle-action">Select All</button>
+                                <button type="button" id="btnDeselectAllCol" class="btn-toggle-action">Deselect All</button>
+                            </div>
+                            
+                            <!-- Multi-select list -->
+                            <div class="collections-multiselect" id="collectionsList">
+                                <div class="loading-inline"><i class="fa-solid fa-spinner fa-spin"></i> Loading collections...</div>
+                            </div>
+                        </div>
+
+                        <!-- Big Search Button -->
+                        <button id="btnSearch" class="btn btn-glow btn-block" disabled>
+                            <i class="fa-solid fa-magnifying-glass-location"></i> SEARCH UP42 CATALOG
+                        </button>
+                    </div>
+                </details>
+            </aside>
+
+            <!-- Map Viewport -->
+            <main class="map-viewport">
+                <div id="map"></div>
+                
+                <!-- Map Float Overlay (Search Progress indicator) -->
+                <div class="map-progress-overlay" id="searchProgressOverlay" style="display: none;">
+                    <div class="progress-spinner">
+                        <i class="fa-solid fa-satellite fa-spin-pulse"></i>
+                    </div>
+                    <div class="progress-info">
+                        <h3>Searching UP42 Catalog...</h3>
+                        <p id="searchProgressText">Sending STAC requests to active data hosts</p>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Sidebar Panel: Right (Search Results) -->
+            <aside class="sidebar results-panel collapsed" id="resultsPanel">
+                <div class="results-header">
+                    <h3><i class="fa-solid fa-database text-cyan"></i> Search Results</h3>
+                    <button class="close-results-btn" id="btnCloseResults"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                
+                <div class="results-summary">
+                    <span class="results-stat" id="resultsCount">0 items</span>
+                    <button id="btnExportGeoJson" class="btn btn-outline btn-sm" title="Export as GeoJSON">
+                        <i class="fa-solid fa-download"></i> GeoJSON
+                    </button>
+                    <button id="btnExportCsv" class="btn btn-outline btn-sm" title="Export as CSV Report">
+                        <i class="fa-solid fa-file-csv"></i> CSV
+                    </button>
+                </div>
+
+                <!-- Results Filter -->
+                <div class="results-filter-bar">
+                    <input type="text" id="resultFilterSearch" placeholder="Filter by satellite/ID...">
+                </div>
+
+                <!-- Results Scroll Container -->
+                <div class="results-scroll" id="resultsList">
+                    <div class="empty-results-state">
+                        <i class="fa-solid fa-satellite-dish placeholder-icon"></i>
+                        <p>Configure vector boundaries, select collections, and click Search to query satellite scenes.</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Detailed Scene Metadata Modal -->
+    <div class="modal-backdrop" id="metadataModal" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Scene Details</h3>
+                <button class="modal-close-btn" id="btnMetadataModalClose"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" id="metadataModalBody">
+                <!-- Injected dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS Libraries -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Leaflet Draw JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    
+    <!-- Application Logic -->
+    <script src="/frontend/app.js"></script>
+</body>
+</html>
