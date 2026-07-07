@@ -1176,3 +1176,46 @@ input:focus, select:focus, textarea:focus {
     border: 1px solid var(--border-color);
 }
 
+/* Event tags styling */
+.event-tag {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(0, 242, 254, 0.1);
+    border: 1px solid rgba(0, 242, 254, 0.3);
+    color: var(--color-cyan);
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    gap: 6px;
+    font-family: var(--font-heading);
+}
+
+.event-tag-remove {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+    transition: color var(--transition-speed);
+}
+
+.event-tag-remove:hover {
+    color: var(--color-rose);
+}
+
+/* Event selection items checkboxes alignment */
+.event-item-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    width: 100%;
+    margin: 0;
+}
+
+.event-item-checkbox {
+    accent-color: var(--color-cyan);
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+}
+

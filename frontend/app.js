@@ -9,7 +9,8 @@ const state = {
     selectedCollections: new Set(), // Track selected collection names
     boundaries: [], // Keep track of layers in drawnItems
     searchResults: null,
-    sceneLayers: {} // Maps feature ID to L.GeoJSON layer
+    sceneLayers: {}, // Maps feature ID to L.GeoJSON layer
+    selectedEvents: [] // Array of selected events for multi-event search
 };
 
 // Elements
@@ -590,6 +591,10 @@ btnSearch.addEventListener('click', async () => {
         limit: parseInt(searchLimitSelect.value)
     };
 
+    if (state.selectedEvents && state.selectedEvents.length > 0) {
+        searchParams.events = state.selectedEvents;
+    }
+
     // Show Progress
     searchProgressOverlay.style.display = 'flex';
     btnSearch.disabled = true;
@@ -925,7 +930,7 @@ btnExportGeoJson.addEventListener('click', () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.searchResults, null, 2));
     const dlAnchorElem = document.createElement('a');
     dlAnchorElem.setAttribute("href", dataStr);
-    dlAnchorElem.setAttribute("download", `cosmos_up42_search_${new Date().toISOString().split('T')[0]}.geojson`);
+    dlAnchorElem.setAttribute("download", `hope42_up42_search_${new Date().toISOString().split('T')[0]}.geojson`);
     dlAnchorElem.click();
 });
 
@@ -936,26 +941,36 @@ btnExportCsv.addEventListener('click', () => {
     let csvContent = "data:text/csv;charset=utf-8,";
     
     // Headers
-    csvContent += "Scene ID,Collection,Acquisition Date,Cloud Cover %,Resolution m,Sensor,Provider Host,Thumbnail URL\n";
+    csvContent += "Event Name,Scene ID,Collection,Acquisition Date,Cloud Cover %,Resolution m,Sensor,Provider Host,Thumbnail URL\n";
     
     features.forEach(f => {
         const props = f.properties || {};
+        const eventName = props.event_name || "Custom Search";
         const id = f.id || '';
         const collection = props.collection || props.collection_name || '';
         const date = props.datetime || props.acquisition_date || '';
-        const cloud = props['eo:cloud_cover'] !== undefined ? props['eo:cloud_cover'] : (props.cloud_cover || '');
+        const cloud = props['eo:cloud_cover'] !== undefined ? props['eo:cloud_cover'] : (props.cloud_cover !== undefined ? props.cloud_cover : '');
         const res = props.resolution || props['gsd'] || '';
         const sensor = props.instrument || props.sensor_type || '';
         const host = props._host || '';
         const thumb = getThumbnailUrl(f) || '';
         
-        csvContent += `"${id}","${collection}","${date}",${cloud},"${res}","${sensor}","${host}","${thumb}"\n`;
+        // Escape quotes
+        const escEvent = eventName.replace(/"/g, '""');
+        const escId = id.replace(/"/g, '""');
+        const escColl = collection.replace(/"/g, '""');
+        const escRes = res.toString().replace(/"/g, '""');
+        const escSensor = sensor.toString().replace(/"/g, '""');
+        const escHost = host.replace(/"/g, '""');
+        const escThumb = thumb.replace(/"/g, '""');
+        
+        csvContent += `"${escEvent}","${escId}","${escColl}","${date}",${cloud},"${escRes}","${escSensor}","${escHost}","${escThumb}"\n`;
     });
     
     const encodedUri = encodeURI(csvContent);
     const dlAnchorElem = document.createElement('a');
     dlAnchorElem.setAttribute("href", encodedUri);
-    dlAnchorElem.setAttribute("download", `cosmos_up42_report_${new Date().toISOString().split('T')[0]}.csv`);
+    dlAnchorElem.setAttribute("download", `hope42_up42_report_${new Date().toISOString().split('T')[0]}.csv`);
     dlAnchorElem.click();
 });
 
@@ -1041,10 +1056,22 @@ const eventModal = document.getElementById('eventModal');
 const btnEventModalClose = document.getElementById('btnEventModalClose');
 const eventFilterSearch = document.getElementById('eventFilterSearch');
 const eventsListContainer = document.getElementById('eventsListContainer');
+const btnSelectAllEvents = document.getElementById('btnSelectAllEvents');
+const btnDeselectAllEvents = document.getElementById('btnDeselectAllEvents');
+const btnApplyEvents = document.getElementById('btnApplyEvents');
+
+// Elements in main UI for selected events
+const selectedEventsDisplay = document.getElementById('selectedEventsDisplay');
+const selectedEventsCount = document.getElementById('selectedEventsCount');
+const selectedEventsTags = document.getElementById('selectedEventsTags');
+const btnClearEvents = document.getElementById('btnClearEvents');
+
+let tempCheckedEvents = [];
 
 // Open Event Modal
 if (btnEventSearch) {
     btnEventSearch.addEventListener('click', () => {
+        tempCheckedEvents = [...state.selectedEvents];
         renderEventsList();
         eventFilterSearch.value = '';
         eventModal.style.display = 'flex';
@@ -1089,25 +1116,151 @@ function renderEventsList(filterText = '') {
             dateRangeStr = evt.start;
         }
         
+        const isChecked = tempCheckedEvents.some(e => e.name === evt.name);
+        
         item.innerHTML = `
-            <span class="event-item-name">${evt.name}</span>
+            <label class="event-item-label" style="display:flex; align-items:center; gap:10px; margin:0; cursor:pointer;">
+                <input type="checkbox" class="event-item-checkbox" ${isChecked ? 'checked' : ''} style="cursor:pointer; width:15px; height:15px; accent-color:var(--color-cyan);">
+                <span class="event-item-name">${evt.name}</span>
+            </label>
             <span class="event-item-date"><i class="fa-regular fa-calendar-days" style="margin-right: 4px;"></i> ${dateRangeStr}</span>
         `;
         
-        item.addEventListener('click', () => {
-            // Apply dates
-            startDateInput.value = evt.start;
-            endDateInput.value = evt.end;
-            
-            // Close modal
-            eventModal.style.display = 'none';
-            
-            // Notify user
-            showNotification('Event Applied', `Date range set for "${evt.name}"`, 'success');
+        const checkbox = item.querySelector('.event-item-checkbox');
+        
+        const toggleCheck = () => {
+            const idx = tempCheckedEvents.findIndex(e => e.name === evt.name);
+            if (idx > -1) {
+                tempCheckedEvents.splice(idx, 1);
+                checkbox.checked = false;
+            } else {
+                tempCheckedEvents.push({ name: evt.name, start: evt.start, end: evt.end });
+                checkbox.checked = true;
+            }
+        };
+        
+        checkbox.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = tempCheckedEvents.findIndex(e => e.name === evt.name);
+            if (checkbox.checked) {
+                if (idx === -1) tempCheckedEvents.push({ name: evt.name, start: evt.start, end: evt.end });
+            } else {
+                if (idx > -1) tempCheckedEvents.splice(idx, 1);
+            }
+        });
+        
+        item.addEventListener('click', (e) => {
+            if (e.target !== checkbox) {
+                toggleCheck();
+            }
         });
         
         eventsListContainer.appendChild(item);
     });
+}
+
+// Select All filtered events
+if (btnSelectAllEvents) {
+    btnSelectAllEvents.addEventListener('click', () => {
+        const query = eventFilterSearch.value.toLowerCase().trim();
+        const filtered = HISTORICAL_EVENTS.filter(evt => 
+            evt.name.toLowerCase().includes(query) || 
+            evt.start.includes(query) || 
+            evt.end.includes(query)
+        );
+        
+        filtered.forEach(evt => {
+            if (!tempCheckedEvents.some(e => e.name === evt.name)) {
+                tempCheckedEvents.push({ name: evt.name, start: evt.start, end: evt.end });
+            }
+        });
+        
+        renderEventsList(eventFilterSearch.value);
+    });
+}
+
+// Deselect All filtered events
+if (btnDeselectAllEvents) {
+    btnDeselectAllEvents.addEventListener('click', () => {
+        const query = eventFilterSearch.value.toLowerCase().trim();
+        const filtered = HISTORICAL_EVENTS.filter(evt => 
+            evt.name.toLowerCase().includes(query) || 
+            evt.start.includes(query) || 
+            evt.end.includes(query)
+        );
+        
+        tempCheckedEvents = tempCheckedEvents.filter(e => 
+            !filtered.some(evt => evt.name === e.name)
+        );
+        
+        renderEventsList(eventFilterSearch.value);
+    });
+}
+
+// Apply Selected Events
+if (btnApplyEvents) {
+    btnApplyEvents.addEventListener('click', () => {
+        state.selectedEvents = [...tempCheckedEvents];
+        eventModal.style.display = 'none';
+        updateSelectedEventsUI();
+        
+        if (state.selectedEvents.length > 0) {
+            showNotification('Events Applied', `${state.selectedEvents.length} historical events selected. Manual date range inputs disabled.`, 'success');
+        } else {
+            showNotification('Events Cleared', 'Date range inputs restored.', 'info');
+        }
+    });
+}
+
+// Clear Events Action
+if (btnClearEvents) {
+    btnClearEvents.addEventListener('click', () => {
+        state.selectedEvents = [];
+        updateSelectedEventsUI();
+        showNotification('Events Cleared', 'Date range inputs restored.', 'info');
+    });
+}
+
+// Update Selected Events UI and tags list
+function updateSelectedEventsUI() {
+    if (!selectedEventsDisplay || !selectedEventsCount || !selectedEventsTags) return;
+    
+    if (state.selectedEvents.length > 0) {
+        selectedEventsDisplay.style.display = 'block';
+        selectedEventsCount.innerText = state.selectedEvents.length;
+        
+        // Disable manual date inputs since they are overridden
+        startDateInput.disabled = true;
+        endDateInput.disabled = true;
+        
+        // Render tags
+        selectedEventsTags.innerHTML = '';
+        state.selectedEvents.forEach((evt, index) => {
+            const tag = document.createElement('span');
+            tag.className = 'event-tag';
+            tag.innerHTML = `
+                ${evt.name}
+                <i class="fa-solid fa-xmark event-tag-remove"></i>
+            `;
+            
+            tag.querySelector('.event-tag-remove').addEventListener('click', (e) => {
+                e.stopPropagation();
+                state.selectedEvents.splice(index, 1);
+                updateSelectedEventsUI();
+                showNotification('Event Removed', `Removed ${evt.name}`, 'info');
+            });
+            
+            selectedEventsTags.appendChild(tag);
+        });
+    } else {
+        selectedEventsDisplay.style.display = 'none';
+        selectedEventsCount.innerText = '0';
+        selectedEventsTags.innerHTML = '';
+        
+        // Re-enable date inputs
+        startDateInput.disabled = false;
+        endDateInput.disabled = false;
+    }
 }
 
 // Event filter input listener

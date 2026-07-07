@@ -139,6 +139,17 @@
                             <i class="fa-solid fa-calendar-check text-cyan"></i> EVENT-BASED SEARCH
                         </button>
                         
+                        <!-- Selected Events Box -->
+                        <div id="selectedEventsDisplay" style="display: none; background: rgba(0, 242, 254, 0.05); border: 1px solid var(--color-cyan); padding: 10px; border-radius: 6px; margin-bottom: 14px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span style="font-size: 0.72rem; font-weight: 700; color: var(--color-cyan); letter-spacing: 0.5px;">SELECTED EVENTS (<span id="selectedEventsCount">0</span>)</span>
+                                <button type="button" id="btnClearEvents" style="background: none; border: none; color: var(--color-rose); font-size: 0.65rem; cursor: pointer; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Clear</button>
+                            </div>
+                            <div id="selectedEventsTags" style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto; padding-right: 2px;">
+                                <!-- Event tags will be injected dynamically -->
+                            </div>
+                        </div>
+                        
                         <!-- Date Range -->
                         <div class="form-row">
                             <div class="form-group col">
@@ -270,16 +281,24 @@
     <div class="modal-backdrop" id="eventModal" style="display: none;">
         <div class="modal" style="max-width: 550px;">
             <div class="modal-header">
-                <h3>Select Historical Event</h3>
+                <h3>Select Historical Events</h3>
                 <button class="modal-close-btn" id="btnEventModalClose"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="modal-body" style="padding-top: 10px;">
-                <div class="results-filter-bar" style="margin-top: 0; margin-bottom: 14px;">
+                <div class="results-filter-bar" style="margin-top: 0; margin-bottom: 10px;">
                     <input type="text" id="eventFilterSearch" placeholder="Search event by name or year...">
                 </div>
-                <div class="events-scroll-list" id="eventsListContainer" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+                <!-- Action bar for Select All/Deselect All -->
+                <div class="col-toggle-bar" style="margin-top: 0; margin-bottom: 10px; padding: 0 4px;">
+                    <button type="button" id="btnSelectAllEvents" class="btn-toggle-action">Select All</button>
+                    <button type="button" id="btnDeselectAllEvents" class="btn-toggle-action">Deselect All</button>
+                </div>
+                <div class="events-scroll-list" id="eventsListContainer" style="max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
                     <!-- Event items injected dynamically -->
                 </div>
+                <button type="button" id="btnApplyEvents" class="btn btn-primary btn-block btn-glow" style="margin-top: 16px;">
+                    Apply Selected Events
+                </button>
             </div>
         </div>
     </div>

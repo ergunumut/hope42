@@ -41,6 +41,7 @@ class SearchRequest(BaseModel):
     datetime: Optional[str] = None  # Format: "2025-01-01T00:00:00Z/2025-01-31T23:59:59Z"
     cloud_cover: Optional[int] = Field(default=None, ge=0, le=100)
     limit: Optional[int] = Field(default=100, ge=1, le=500)
+    events: Optional[List[Dict[str, Any]]] = None  # List of event dicts with name, start, and end keys
 
 class WktParseRequest(BaseModel):
     wkt: str
@@ -210,35 +211,53 @@ async def search_catalog(req: SearchRequest):
     aggregated_features = []
     errors = {}
 
-    for host, cols in host_to_collections.items():
-        try:
-            logger.info(f"Querying host '{host}' for collections {cols}")
-            results = up42_client.search_catalog(
-                host_name=host,
-                collections=cols,
-                geometry=req.geometry,
-                datetime_str=req.datetime,
-                limit=req.limit,
-                cloud_cover=req.cloud_cover
-            )
+    # Define queries (either list of events or a single fallback query)
+    queries = []
+    if req.events:
+        for evt in req.events:
+            queries.append({
+                "name": evt.get("name", "Event"),
+                "datetime": f"{evt.get('start')}T00:00:00Z/{evt.get('end')}T23:59:59Z"
+            })
+    else:
+        queries.append({
+            "name": "Custom Search",
+            "datetime": req.datetime
+        })
 
-            # Standard STAC responses have features array
-            features = results.get("features", [])
-            for feature in features:
-                # Inject catalog host details and collection identifier
-                feature["properties"]["_host"] = host
-                # Some STAC searches return collection in properties, ensure it's set
-                if "collection" not in feature["properties"] and feature.get("collection"):
-                    feature["properties"]["collection"] = feature.get("collection")
-                
-                aggregated_features.append(feature)
-                
-            if "error" in results:
-                errors[host] = results["error"]
+    for q in queries:
+        event_name = q["name"]
+        dt_str = q["datetime"]
+        
+        for host, cols in host_to_collections.items():
+            try:
+                logger.info(f"Querying host '{host}' for event '{event_name}' ({dt_str})")
+                results = up42_client.search_catalog(
+                    host_name=host,
+                    collections=cols,
+                    geometry=req.geometry,
+                    datetime_str=dt_str,
+                    limit=req.limit,
+                    cloud_cover=req.cloud_cover
+                )
 
-        except Exception as e:
-            logger.error(f"Error querying catalog on host {host}: {e}")
-            errors[host] = str(e)
+                # Standard STAC responses have features array
+                features = results.get("features", [])
+                for feature in features:
+                    # Inject catalog host details, collection, and matching event name
+                    feature["properties"]["_host"] = host
+                    feature["properties"]["event_name"] = event_name
+                    if "collection" not in feature["properties"] and feature.get("collection"):
+                        feature["properties"]["collection"] = feature.get("collection")
+                    
+                    aggregated_features.append(feature)
+                    
+                if "error" in results:
+                    errors[f"{host} ({event_name})"] = results["error"]
+
+            except Exception as e:
+                logger.error(f"Error querying host {host} for event {event_name}: {e}")
+                errors[f"{host} ({event_name})"] = str(e)
 
     # 5. Return aggregated FeatureCollection (sliced to requested limit)
     sliced_features = aggregated_features[:req.limit] if req.limit else aggregated_features
