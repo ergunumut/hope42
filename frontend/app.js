@@ -689,34 +689,46 @@ function displayResults(fc) {
             const geoLayer = L.geoJSON(feature, {
                 style: defaultStyle,
                 onEachFeature: (f, layer) => {
-                    // Popup content
-                    let popupContent = `
-                        <div style="font-family: var(--font-body); font-size: 0.8rem; line-height: 1.4; max-width: 250px;">
-                            <strong style="color: var(--color-cyan); font-size: 0.85rem; font-family: var(--font-heading); display: block; margin-bottom: 6px;">
-                                ${collection.toUpperCase()}
-                            </strong>
-                            ${thumbUrl ? `<img src="${thumbUrl}" style="width: 100%; max-height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 8px;">` : ''}
-                            <table style="width:100%; border-collapse:collapse;">
-                                <tr><td style="color:var(--text-secondary); padding: 2px 0;">Date:</td><td style="font-weight:600; text-align:right;">${formattedDate.split(',')[0]}</td></tr>
-                                <tr><td style="color:var(--text-secondary); padding: 2px 0;">Cloud Cover:</td><td style="font-weight:600; text-align:right;">${cloudCover !== undefined ? cloudCover.toFixed(1) + '%' : 'N/A'}</td></tr>
-                                <tr><td style="color:var(--text-secondary); padding: 2px 0;">Res:</td><td style="font-weight:600; text-align:right;">${resolution} m</td></tr>
-                            </table>
-                            <button class="btn btn-primary btn-block btn-sm" style="margin-top: 8px;" onclick="showSceneMetadata('${id}')">Full Metadata</button>
-                        </div>
+                    // Create Popup DOM Element programmatically to avoid ID escaping issues
+                    const popupDiv = document.createElement('div');
+                    popupDiv.style.fontFamily = 'var(--font-body)';
+                    popupDiv.style.fontSize = '0.8rem';
+                    popupDiv.style.lineHeight = '1.4';
+                    popupDiv.style.maxWidth = '250px';
+                    popupDiv.innerHTML = `
+                        <strong style="color: var(--color-cyan); font-size: 0.85rem; font-family: var(--font-heading); display: block; margin-bottom: 6px;">
+                            ${collection.toUpperCase()}
+                        </strong>
+                        ${thumbUrl ? `<img src="${thumbUrl}" style="width: 100%; max-height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 8px;">` : ''}
+                        <table style="width:100%; border-collapse:collapse;">
+                            <tr><td style="color:var(--text-secondary); padding: 2px 0;">Date:</td><td style="font-weight:600; text-align:right;">${formattedDate.split(',')[0]}</td></tr>
+                            <tr><td style="color:var(--text-secondary); padding: 2px 0;">Cloud:</td><td style="font-weight:600; text-align:right;">${cloudCover !== undefined ? cloudCover.toFixed(1) + '%' : 'N/A'}</td></tr>
+                            <tr><td style="color:var(--text-secondary); padding: 2px 0;">Res:</td><td style="font-weight:600; text-align:right;">${resolution} m</td></tr>
+                        </table>
                     `;
-                    layer.bindPopup(popupContent);
+                    
+                    const btnMetadata = document.createElement('button');
+                    btnMetadata.className = 'btn btn-primary btn-block btn-sm';
+                    btnMetadata.style.marginTop = '8px';
+                    btnMetadata.innerText = 'Full Metadata';
+                    btnMetadata.addEventListener('click', () => {
+                        showSceneMetadata(id);
+                    });
+                    popupDiv.appendChild(btnMetadata);
+                    
+                    layer.bindPopup(popupDiv);
                     
                     // Hover effects
                     layer.on('mouseover', () => {
                         layer.setStyle(hoverStyle);
-                        const card = document.getElementById(`card-${id}`);
-                        if (card) card.classList.add('active-scene-card');
+                        const cardElement = document.getElementById(`card-${id}`);
+                        if (cardElement) cardElement.classList.add('active-scene-card');
                     });
                     
                     layer.on('mouseout', () => {
                         layer.setStyle(defaultStyle);
-                        const card = document.getElementById(`card-${id}`);
-                        if (card) card.classList.remove('active-scene-card');
+                        const cardElement = document.getElementById(`card-${id}`);
+                        if (cardElement) cardElement.classList.remove('active-scene-card');
                     });
                 }
             });
@@ -732,7 +744,10 @@ function displayResults(fc) {
         card.innerHTML = `
             <div class="scene-card-header">
                 <span class="scene-collection">${collection}</span>
-                <span class="scene-date">${formattedDate.split(',')[0]}</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="scene-date">${formattedDate.split(',')[0]}</span>
+                    <button class="btn-card-info" title="View Full Metadata" style="background:none; border:none; color:var(--color-cyan); cursor:pointer; padding:2px; font-size:0.85rem; display:flex; align-items:center; justify-content:center;"><i class="fa-solid fa-circle-info"></i></button>
+                </div>
             </div>
             <div class="scene-card-body">
                 <div class="scene-thumbnail-container">
@@ -778,6 +793,20 @@ function displayResults(fc) {
                 map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
                 geoLayer.openPopup();
             }
+        });
+
+        // Info Button click
+        const btnCardInfo = card.querySelector('.btn-card-info');
+        if (btnCardInfo) {
+            btnCardInfo.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent triggering map center/popup action
+                showSceneMetadata(id);
+            });
+        }
+
+        // Double click
+        card.addEventListener('dblclick', () => {
+            showSceneMetadata(id);
         });
 
         resultsListDiv.appendChild(card);

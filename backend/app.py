@@ -240,12 +240,14 @@ async def search_catalog(req: SearchRequest):
             logger.error(f"Error querying catalog on host {host}: {e}")
             errors[host] = str(e)
 
-    # 5. Return aggregated FeatureCollection
+    # 5. Return aggregated FeatureCollection (sliced to requested limit)
+    sliced_features = aggregated_features[:req.limit] if req.limit else aggregated_features
     return {
         "type": "FeatureCollection",
-        "features": aggregated_features,
+        "features": sliced_features,
         "search_summary": {
-            "total_features": len(aggregated_features),
+            "total_features": len(sliced_features),
+            "unfiltered_total": len(aggregated_features),
             "errors": errors if errors else None
         }
     }
