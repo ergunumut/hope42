@@ -1,4 +1,4 @@
-// COSMOS | UP42 Catalog Matcher Logic
+// HOPE42 | UP42 Catalog Matcher Logic
 
 // Application State
 const state = {
