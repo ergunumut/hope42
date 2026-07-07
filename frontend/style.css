@@ -1133,3 +1133,7 @@ input:focus, select:focus, textarea:focus {
     opacity: 0.8;
 }
 
+#btnSearch {
+    flex-shrink: 0;
+}
+
