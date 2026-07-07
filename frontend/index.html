@@ -134,6 +134,11 @@
                 <details open class="settings-card" id="searchParamsCard">
                     <summary><i class="fa-solid fa-sliders icon-glow"></i> Search Catalog Parameters</summary>
                     <div class="details-content">
+                        <!-- Event Based Search Button -->
+                        <button type="button" id="btnEventSearch" class="btn btn-secondary btn-block btn-sm" style="margin-bottom: 14px;">
+                            <i class="fa-solid fa-calendar-check text-cyan"></i> EVENT-BASED SEARCH
+                        </button>
+                        
                         <!-- Date Range -->
                         <div class="form-row">
                             <div class="form-group col">
@@ -257,6 +262,24 @@
             </div>
             <div class="modal-body" id="metadataModalBody">
                 <!-- Injected dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Selection Modal -->
+    <div class="modal-backdrop" id="eventModal" style="display: none;">
+        <div class="modal" style="max-width: 550px;">
+            <div class="modal-header">
+                <h3>Select Historical Event</h3>
+                <button class="modal-close-btn" id="btnEventModalClose"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" style="padding-top: 10px;">
+                <div class="results-filter-bar" style="margin-top: 0; margin-bottom: 14px;">
+                    <input type="text" id="eventFilterSearch" placeholder="Search event by name or year...">
+                </div>
+                <div class="events-scroll-list" id="eventsListContainer" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+                    <!-- Event items injected dynamically -->
+                </div>
             </div>
         </div>
     </div>

@@ -1013,6 +1013,110 @@ function showNotification(title, text, type = 'info') {
     }, 4000);
 }
 
+// Historical Storms and Lows Events List
+const HISTORICAL_EVENTS = [
+    { name: "Storm Sebastian", start: "2017-09-13", end: "2017-09-14" },
+    { name: "Storm Herwart", start: "2017-10-29", end: "2017-10-30" },
+    { name: "Himmelfahrt Convective Cell", start: "2018-05-10", end: "2018-05-11" },
+    { name: "Storm Sabine (Ciara)", start: "2020-02-10", end: "2020-02-12" },
+    { name: "Neugraben Local Downpour", start: "2020-06-18", end: "2020-06-19" },
+    { name: "North Hamburg Convective Cell", start: "2021-08-06", end: "2021-08-07" },
+    { name: "Storm Nadia", start: "2022-01-29", end: "2022-01-30" },
+    { name: "Storm Zeynep (Eunice)", start: "2022-02-18", end: "2022-02-19" },
+    { name: "Storm Antonia", start: "2022-02-21", end: "2022-02-22" },
+    { name: "W-NW Trough Passage", start: "2023-02-01", end: "2023-02-02" },
+    { name: "Storm Zoltan", start: "2023-12-21", end: "2023-12-22" },
+    { name: "Summer Cloudburst", start: "2024-06-27", end: "2024-06-28" },
+    { name: "Billstedt Downpour", start: "2024-08-07", end: "2024-08-08" },
+    { name: "Pre-Christmas Winter Low", start: "2024-12-20", end: "2024-12-21" },
+    { name: "Winter Season Kick-off Storm", start: "2025-01-07", end: "2025-01-08" },
+    { name: "Autumn Low Pressure", start: "2025-10-05", end: "2025-10-06" },
+    { name: "Early Winter Flood Wave", start: "2025-10-24", end: "2025-10-26" },
+    { name: "New Year's Storm", start: "2026-01-01", end: "2026-01-02" }
+];
+
+// Event Modal DOM elements
+const btnEventSearch = document.getElementById('btnEventSearch');
+const eventModal = document.getElementById('eventModal');
+const btnEventModalClose = document.getElementById('btnEventModalClose');
+const eventFilterSearch = document.getElementById('eventFilterSearch');
+const eventsListContainer = document.getElementById('eventsListContainer');
+
+// Open Event Modal
+if (btnEventSearch) {
+    btnEventSearch.addEventListener('click', () => {
+        renderEventsList();
+        eventFilterSearch.value = '';
+        eventModal.style.display = 'flex';
+    });
+}
+
+// Close Event Modal
+if (btnEventModalClose) {
+    btnEventModalClose.addEventListener('click', () => {
+        eventModal.style.display = 'none';
+    });
+}
+
+// Render Events dynamically
+function renderEventsList(filterText = '') {
+    if (!eventsListContainer) return;
+    eventsListContainer.innerHTML = '';
+    
+    const query = filterText.toLowerCase().trim();
+    const filtered = HISTORICAL_EVENTS.filter(evt => 
+        evt.name.toLowerCase().includes(query) || 
+        evt.start.includes(query) || 
+        evt.end.includes(query)
+    );
+    
+    if (filtered.length === 0) {
+        eventsListContainer.innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); padding: 20px; font-size: 0.82rem;">
+                No matching historical events found.
+            </div>
+        `;
+        return;
+    }
+    
+    filtered.forEach(evt => {
+        const item = document.createElement('div');
+        item.className = 'event-item';
+        
+        // Display dates nicely
+        let dateRangeStr = `${evt.start} - ${evt.end}`;
+        if (evt.start === evt.end) {
+            dateRangeStr = evt.start;
+        }
+        
+        item.innerHTML = `
+            <span class="event-item-name">${evt.name}</span>
+            <span class="event-item-date"><i class="fa-regular fa-calendar-days" style="margin-right: 4px;"></i> ${dateRangeStr}</span>
+        `;
+        
+        item.addEventListener('click', () => {
+            // Apply dates
+            startDateInput.value = evt.start;
+            endDateInput.value = evt.end;
+            
+            // Close modal
+            eventModal.style.display = 'none';
+            
+            // Notify user
+            showNotification('Event Applied', `Date range set for "${evt.name}"`, 'success');
+        });
+        
+        eventsListContainer.appendChild(item);
+    });
+}
+
+// Event filter input listener
+if (eventFilterSearch) {
+    eventFilterSearch.addEventListener('input', (e) => {
+        renderEventsList(e.target.value);
+    });
+}
+
 // Initial Fetch on app load
 fetchCollections();
 updateBoundariesList();

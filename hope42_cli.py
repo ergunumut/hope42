@@ -262,36 +262,136 @@ def load_vector_file(filepath):
 # 2. UP42 HTTP CLIENT
 # ==========================================
 
+def mask_secret(value, keep=4):
+    if not value:
+        return "<empty>"
+    if len(value) <= keep:
+        return "*" * len(value)
+    return value[:2] + "*" * (len(value) - keep) + value[-2:]
+
+
+def describe_auth_failure(status_code=None, error_body=None):
+    details = ""
+    if error_body:
+        try:
+            payload = json.loads(error_body)
+            if isinstance(payload, dict):
+                if payload.get("error_description"):
+                    details = payload["error_description"]
+                elif payload.get("error"):
+                    details = payload["error"]
+                elif payload.get("message"):
+                    details = payload["message"]
+        except Exception:
+            details = error_body.strip()
+
+    lowered = f"{details} {status_code or ''}".lower()
+    hints = [
+        "If your username and password are correct, the most common causes are SSO/MFA sign-in, a temporary password, or an account that is not enabled for API access.",
+        "Use the exact email address from the UP42 Console login, not a different alias or a username from another service.",
+        "If the password includes special characters, make sure it is not truncated by .env parsing, shell quoting, or extra whitespace.",
+        "If you recently changed the password, sign in to the UP42 web console once and confirm the new password works there first."
+    ]
+    if "invalid_grant" in lowered or "credentials" in lowered or "1010" in lowered:
+        hints.insert(0, "The response indicates that the password was rejected by the auth service.")
+    if "sso" in lowered or "mfa" in lowered:
+        hints.insert(1, "Your account may require SSO or multi-factor authentication instead of a direct password grant.")
+
+    if details:
+        return f"UP42 authentication failed. Server response: {details}. {' '.join(hints)}"
+    return f"UP42 authentication failed. {' '.join(hints)}"
+
+
 class UP42Client:
-    def __init__(self, email, password):
-        self.email = email
-        self.password = password
+    def __init__(self, email, password, client_id=None, auth_url=None, scope=None, debug=False):
+        self.email = (email or "").strip()
+        self.password = (password or "").strip()
         self.token = None
         self.expiry = 0
-        self.auth_url = "https://auth.up42.com/realms/public/protocol/openid-connect/token"
+        self.client_id = client_id or os.environ.get("UP42_CLIENT_ID") or "up42-api"
+        self.auth_url = auth_url or os.environ.get("UP42_AUTH_URL") or "https://auth.up42.com/realms/public/protocol/openid-connect/token"
+        self.scope = scope or os.environ.get("UP42_SCOPE") or "openid"
+        self.debug = debug
         self.api_url = "https://api.up42.com"
+
+    def _candidate_auth_requests(self):
+        urls = []
+        base = (self.auth_url or "").strip()
+        if base:
+            urls.append(base)
+            if "/auth/" not in base and "/auth" not in base:
+                if base.startswith("https://auth.up42.com"):
+                    urls.append(base.replace("https://auth.up42.com/", "https://auth.up42.com/auth/", 1))
+                elif base.startswith("http://"):
+                    urls.append(base.replace("http://", "http://", 1))
+        if not urls:
+            urls.append("https://auth.up42.com/realms/public/protocol/openid-connect/token")
+            urls.append("https://auth.up42.com/auth/realms/public/protocol/openid-connect/token")
+
+        client_ids = []
+        if self.client_id:
+            client_ids.append(self.client_id)
+        client_ids.extend(["up42-api", "up42"])
+        seen_clients = set()
+        ordered_clients = []
+        for client_id in client_ids:
+            if client_id and client_id not in seen_clients:
+                ordered_clients.append(client_id)
+                seen_clients.add(client_id)
+
+        for url in urls:
+            for client_id in ordered_clients:
+                yield url, client_id
 
     def get_token(self):
         if self.token and time.time() < self.expiry - 10:
             return self.token
-            
-        data = f"username={urllib.parse.quote(self.email)}&password={urllib.parse.quote(self.password)}&grant_type=password&client_id=up42-api"
-        req = urllib.request.Request(
-            self.auth_url,
-            data=data.encode('utf-8'),
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=15) as res:
-                res_data = json.loads(res.read().decode('utf-8'))
-                self.token = res_data["access_token"]
-                self.expiry = time.time() + res_data.get("expires_in", 300)
-                return self.token
-        except urllib.error.HTTPError as e:
-            err_msg = e.read().decode('utf-8')
-            raise Exception(f"UP42 Login Failed (HTTP {e.code}): {err_msg}")
-        except Exception as e:
-            raise Exception(f"Network error during login: {e}")
+
+        last_error = None
+        for auth_url, client_id in self._candidate_auth_requests():
+            if self.debug:
+                print(f"[Debug] Auth request -> URL: {auth_url}")
+                print(f"[Debug] Auth request -> client_id: {client_id}")
+                print(f"[Debug] Auth request -> username: {self.email}")
+                print(f"[Debug] Auth request -> password: {mask_secret(self.password)}")
+
+            post_data = urllib.parse.urlencode({
+                "username": self.email,
+                "password": self.password,
+                "grant_type": "password",
+                "client_id": client_id,
+                "scope": self.scope
+            })
+            req = urllib.request.Request(
+                auth_url,
+                data=post_data.encode('utf-8'),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json"
+                }
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=15) as res:
+                    res_data = json.loads(res.read().decode('utf-8'))
+                    self.token = res_data["access_token"]
+                    self.expiry = time.time() + res_data.get("expires_in", 300)
+                    return self.token
+            except urllib.error.HTTPError as e:
+                err_msg = e.read().decode('utf-8', errors='ignore')
+                last_error = describe_auth_failure(e.code, err_msg)
+                if self.debug:
+                    print(f"[Debug] Auth response -> HTTP {e.code}")
+                    print(f"[Debug] Auth response -> body: {err_msg}")
+                continue
+            except Exception as e:
+                last_error = f"Network error during login: {e}"
+                if self.debug:
+                    print(f"[Debug] Auth response -> error: {last_error}")
+                continue
+
+        if last_error:
+            raise Exception(last_error)
+        raise Exception("UP42 authentication failed with no usable response.")
 
     def fetch_collections(self):
         url = f"{self.api_url}/v2/collections?size=250"
@@ -359,14 +459,47 @@ def load_dot_env():
     """
     env_vars = {}
     if os.path.exists(".env"):
-        with open(".env", "r") as f:
+        with open(".env", "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 k, v = line.split("=", 1)
-                env_vars[k.strip()] = v.strip().strip('"').strip("'")
+                k = k.strip()
+                if k.startswith("export "):
+                    k = k[len("export "):].strip()
+                env_vars[k] = v.strip().strip('"').strip("'")
     return env_vars
+
+
+def resolve_credentials(args, env, os_environ=None):
+    os_environ = os_environ or os.environ
+    email = (
+        args.email
+        or env.get("UP42_EMAIL")
+        or env.get("UP42_USERNAME")
+        or os_environ.get("UP42_EMAIL")
+        or os_environ.get("UP42_USERNAME")
+    )
+    password = args.password or env.get("UP42_PASSWORD") or os_environ.get("UP42_PASSWORD")
+
+    if not email:
+        email = input("Enter your UP42 Console Email: ").strip()
+    if not password:
+        password = getpass.getpass("Enter your UP42 Console Password: ")
+
+    if not email or not password:
+        raise ValueError("Email and Password are required to query UP42.")
+
+    source = "prompt"
+    if args.email:
+        source = "command-line"
+    elif env.get("UP42_EMAIL") or env.get("UP42_USERNAME"):
+        source = ".env"
+    elif os_environ.get("UP42_EMAIL") or os_environ.get("UP42_USERNAME"):
+        source = "environment"
+
+    return email.strip(), password.strip(), source
 
 # ==========================================
 # 4. MAIN PROGRAM FLOW
@@ -384,22 +517,26 @@ def main():
     parser.add_argument("-e", "--end", help="End Date (YYYY-MM-DD). Defaults to today.")
     parser.add_argument("-c", "--cloud", type=int, default=20, help="Max cloud cover percentage (0-100). Default is 20%%.")
     parser.add_argument("-o", "--output", default="up42_search_report.txt", help="Output text file path. Default: up42_search_report.txt")
+    parser.add_argument("--email", help="Explicit UP42 email address (overrides .env and environment variables)")
+    parser.add_argument("--password", help="Explicit UP42 password (overrides .env and environment variables)")
+    parser.add_argument("--debug-auth", action="store_true", help="Print UP42 authentication request details to help diagnose login issues")
     
     args = parser.parse_args()
     
     # 1. Load credentials
     env = load_dot_env()
-    email = env.get("UP42_EMAIL") or os.environ.get("UP42_EMAIL")
-    password = env.get("UP42_PASSWORD") or os.environ.get("UP42_PASSWORD")
-    
-    if not email:
-        email = input("Enter your UP42 Console Email: ").strip()
-    if not password:
-        password = getpass.getpass("Enter your UP42 Console Password: ")
-        
-    if not email or not password:
-        print("[Error] Email and Password are required to query UP42.")
+    try:
+        email, password, credential_source = resolve_credentials(args, env)
+    except ValueError as exc:
+        print(f"[Error] {exc}")
         sys.exit(1)
+
+    if args.debug_auth:
+        print(f"[Debug] Credentials source: {credential_source}")
+        print(f"[Debug] Email: {email}")
+        print(f"[Debug] Password: {mask_secret(password)}")
+        print(f"[Debug] Auth URL: {os.environ.get('UP42_AUTH_URL', 'https://auth.up42.com/realms/public/protocol/openid-connect/token')}")
+        print(f"[Debug] Client ID: {os.environ.get('UP42_CLIENT_ID', 'up42-api')}")
         
     # 2. Gather Inputs
     vector_path = args.file
@@ -447,7 +584,14 @@ def main():
     # 3. Authenticate
     print("[2/4] Connecting and authenticating with UP42...")
     try:
-        client = UP42Client(email, password)
+        client = UP42Client(
+            email,
+            password,
+            client_id=os.environ.get("UP42_CLIENT_ID"),
+            auth_url=os.environ.get("UP42_AUTH_URL"),
+            scope=os.environ.get("UP42_SCOPE"),
+            debug=args.debug_auth,
+        )
         # Force token check
         client.get_token()
         print(" -> Authentication Successful!")
